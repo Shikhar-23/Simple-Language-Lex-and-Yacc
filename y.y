@@ -3,31 +3,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdarg.h>
-typedef enum { typeCon, typeId, typeOpr } nodeEnum;
-
-typedef struct {
- int value;
-} conNodeType;
-
-typedef struct {
- int i; 
-} idNodeType;
-
-typedef struct {
- int oper; 
- int nops; 
- struct nodeType **op; 
-} oprNodeType;
-
-struct nodeType {
- nodeEnum type; /* type of node */
- conNodeType con; /* constants */
- idNodeType id; /* identifiers */
- oprNodeType opr; /* operators */
-};
-
-typedef struct nodeType NodeType;
-
+#include "util.h"
 int yyerror(char*);
 int yylex();
 extern FILE* yyin;
@@ -40,14 +16,16 @@ void assignValDouble(char symbol, double);
 NodeType *opr(int oper, int nops, ...);
 NodeType *id(int i);
 NodeType *con(int value);
-int process(NodeType *p);
+NodeType *flo(float);
+
+float process(NodeType *p);
 
 %}
 
 %union {
   int intval;
   char id;
-  double deci;
+  float deci;
   struct NodeType *nPtr;
 };
 
@@ -87,6 +65,7 @@ stmt:  ';' { $$ = opr(';', 2, NULL, NULL); }
        | IF '(' exp ')' stmt ELSE stmt { $$ = opr(IF, 3, $3, $5, $7); }
        | '{' stmt_list '}' { $$ = $2; }
        ;
+
 stmt_list:
  stmt { $$ = $1; }
  | stmt_list stmt { $$ = opr(';', 2, $1, $2); }
@@ -96,6 +75,7 @@ stmt_list:
 
 exp : NUMBER { $$ = con($1); }
      | IDENTIFIER {$$ = id($1); }
+     | DECIMAL {$$ = flo($1); }
      | exp '+' exp { $$ = opr('+', 2, $1, $3); }
      | exp '-' exp { $$ = opr('-', 2, $1, $3); }
      | exp '*' exp { $$ = opr('*', 2, $1, $3); }
@@ -178,6 +158,17 @@ NodeType *con(int value) {
  p->con.value = value;
  return p;
 }
+
+NodeType *flo(float value) {
+ printf("%f\n", value);
+ NodeType *p;
+ if ((p = malloc(sizeof(NodeType))) == NULL)
+ yyerror("out of memory");
+ p->type = typeFlo;
+ p->flo.value = value;
+ return p;
+}
+
 NodeType *id(int i) {
  NodeType *p;
  if ((p = malloc(sizeof(NodeType))) == NULL)
@@ -187,12 +178,14 @@ NodeType *id(int i) {
  return p;
 } 
 
-int process(NodeType *p) {
+float process(NodeType *p) {
  if (!p) return 0;
  switch(p->type) {
-   printf("%d\n", p -> type);
    case typeCon: return p->con.value;
-   case typeId: return symbols[p->id.i];
+   case typeFlo: return p->flo.value;
+   case typeId: {
+                 return symbols[p->id.i];
+                }
    case typeOpr:
    switch(p->opr.oper) {
    case WHILE: while(process(p->opr.op[0]))  
@@ -200,17 +193,26 @@ int process(NodeType *p) {
               return 0;
    case IF: if (process(p->opr.op[0])) process(p->opr.op[1]);
             else if (p->opr.nops > 2) process(p->opr.op[2]); return 0;
-   case PRINT: printf("%d\n", process(p->opr.op[0])); return 0;
+   case PRINT:  {
+                  if(p -> opr.op[0] -> type == typeFlo){
+                    printf("here\n");
+                    printf("%f\n", process(p->opr.op[0])); return 0;
+                  }
+                  else {
+                    printf("%d\n", process(p->opr.op[0])); return 0;
+                  }
+                }
    case ';': process(p->opr.op[0]); return process(p->opr.op[1]);
    case '=': return symbols[p->opr.op[0]->id.i] = process(p->opr.op[1]);
    case UMINUS: return -process(p->opr.op[0]);
    case '+': return process(p->opr.op[0]) + process(p->opr.op[1]);
    case '-': return process(p->opr.op[0]) - process(p->opr.op[1]);
    case '*': return process(p->opr.op[0]) * process(p->opr.op[1]);
-   case '/': return process(p->opr.op[0]) / process(p->opr.op[1]);
+   case '/': return 1.0 * process(p->opr.op[0]) / process(p->opr.op[1]);
    case '<': return process(p->opr.op[0]) < process(p->opr.op[1]);
    case '>': return process(p->opr.op[0]) > process(p->opr.op[1]);
    case '^': return pow(process(p->opr.op[0]), process(p->opr.op[1]));
+   default : yyerror("Operator not found");
 
    }
  }

@@ -2,35 +2,13 @@
 #include <stdio.h>
 #include "y.tab.h"
 int yyerror(char *);
-typedef enum { typeCon, typeId, typeOpr } nodeEnum;
-
-typedef struct {
- int value;
-} conNodeType;
-
-typedef struct {
- int i; 
-} idNodeType;
-
-typedef struct {
- int oper; 
- int nops; 
- struct nodeType **op; 
-} oprNodeType;
-
-typedef struct  {
- nodeEnum type; /* type of node */
- conNodeType con; /* constants */
- idNodeType id; /* identifiers */
- oprNodeType opr; /* operators */
-} nodeType;
-
-
+#include "util.h"
 %}
 
 
 DIGIT [0-9]
 ID [a-z]
+DOT [\.]
 
 %%
 
@@ -46,6 +24,12 @@ ID [a-z]
             yylval.intval = atoi(yytext);
             return(NUMBER);
         }
+
+[-]?{DIGIT}+{DOT}{DIGIT}+  {
+            yylval.deci = atof(yytext);
+            return(DECIMAL);
+        }
+
 
 {ID}		{
 				yylval.id = *yytext;
