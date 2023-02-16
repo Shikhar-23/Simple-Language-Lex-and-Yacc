@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include "y.tab.h"
 int yyerror(char *);
-#include "util.h"
 %}
 
 
@@ -27,7 +26,7 @@ DOT [\.]
 
 [-]?{DIGIT}+{DOT}{DIGIT}+  {
             yylval.deci = atof(yytext);
-            return(DECIMAL);
+            return(DECI);
         }
 
 

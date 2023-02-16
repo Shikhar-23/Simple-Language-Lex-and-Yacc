@@ -7,18 +7,14 @@
 int yyerror(char*);
 int yylex();
 extern FILE* yyin;
-double symbols[26];
-int getInd(char symbol);
-int getVal(char symbol);
-void assignVal(char symbol, int);
-void assignValDouble(char symbol, double);
-
+double symbols[256];
+dataType sym[256];
 NodeType *opr(int oper, int nops, ...);
 NodeType *id(int i);
 NodeType *con(int value);
 NodeType *flo(float);
 
-float process(NodeType *p);
+val *process(struct nodeType *p);
 
 %}
 
@@ -26,13 +22,13 @@ float process(NodeType *p);
   int intval;
   char id;
   float deci;
-  struct NodeType *nPtr;
+  struct nodeType *nPtr;
 };
 
 %start program
 %token <intval> NUMBER /* Simple integer */
 %token <id> IDENTIFIER /* Simple identifier */
-%token <deci> DECIMAL /* Simple decimal */
+%token <deci> DECI /* Simple decimal */
 %token ELSE IF
 %token PRINT
 %token ASSGNOP
@@ -75,14 +71,13 @@ stmt_list:
 
 exp : NUMBER { $$ = con($1); }
      | IDENTIFIER {$$ = id($1); }
-     | DECIMAL {$$ = flo($1); }
+     | DECI {$$ = flo($1); }
      | exp '+' exp { $$ = opr('+', 2, $1, $3); }
      | exp '-' exp { $$ = opr('-', 2, $1, $3); }
      | exp '*' exp { $$ = opr('*', 2, $1, $3); }
      | exp '/' exp { $$ = opr('/', 2, $1, $3); }
      | exp '<' exp { $$ = opr('<', 2, $1, $3); }
      | exp '>' exp { $$ = opr('>', 2, $1, $3); } 
-     | exp '=' exp { $$ = opr('=', 2, $1, $3); }
      | exp '^' exp { $$ = opr('^', 2, $1, $3); }
      | '(' exp ')' { $$ = $2; }
      | '-' exp %prec UMINUS { $$ = opr(UMINUS, 1, $2); } 
@@ -97,8 +92,9 @@ int yyerror(char *s){
 }
 
 int main(int argc, char **argv){
-  for(int i=0; i<26; i++) {
+  for(int i=0; i<256; i++) {
     symbols[i] = 0;
+    sym[i] = INTEGER;
   }
    FILE *f;
   if(argc != 2){
@@ -106,31 +102,12 @@ int main(int argc, char **argv){
       exit(1);
   }
   if(!(yyin = fopen(argv[1],"r"))){ 
-       printf("cannot open file\n");exit(1);
+       printf("cannot open file\n"); exit(1);
  }
   yyparse();
 
   return 0;
 }
-
-/*
-int getInd(char symbol){
-  if(symbol >= 'a' && symbol <= 'z') return (int)(symbol - 'a');
-  else yyerror("Not Valid variable Symbol");
-}
-
-void assignVal(char symbol, int val){
-  symbols[getInd(symbol)] = val;
-}
-
-void assignValDouble(char symbol, double val){
-  symbols[getInd(symbol)] = val;
-}
-
-int getVal(char symbol){
-  return symbols[getInd(symbol)];
-}
-*/
 
 NodeType *opr(int oper, int nops, ...) {
  va_list ap;
@@ -156,66 +133,283 @@ NodeType *con(int value) {
  yyerror("out of memory");
  p->type = typeCon;
  p->con.value = value;
+ p->dType = INTEGER;
  return p;
 }
 
 NodeType *flo(float value) {
- printf("%f\n", value);
  NodeType *p;
  if ((p = malloc(sizeof(NodeType))) == NULL)
  yyerror("out of memory");
  p->type = typeFlo;
  p->flo.value = value;
+ p->dType = DECIMAL;
  return p;
 }
 
 NodeType *id(int i) {
  NodeType *p;
  if ((p = malloc(sizeof(NodeType))) == NULL)
- yyerror("out of memory");
+    yyerror("out of memory");
  p->type = typeId;
  p->id.i = i;
+ p -> dType = sym[i];
  return p;
 } 
 
-float process(NodeType *p) {
+val *process(NodeType *p) {
  if (!p) return 0;
+ val *ret;
+ ret = malloc(sizeof(val));
+ ret -> dType = INTEGER;
+ ret -> con = 0;
+ ret -> flo = 0;
  switch(p->type) {
-   case typeCon: return p->con.value;
-   case typeFlo: return p->flo.value;
-   case typeId: {
-                 return symbols[p->id.i];
-                }
-   case typeOpr:
-   switch(p->opr.oper) {
-   case WHILE: while(process(p->opr.op[0]))  
-               process(p->opr.op[1]);
-              return 0;
-   case IF: if (process(p->opr.op[0])) process(p->opr.op[1]);
-            else if (p->opr.nops > 2) process(p->opr.op[2]); return 0;
-   case PRINT:  {
-                  if(p -> opr.op[0] -> type == typeFlo){
-                    printf("here\n");
-                    printf("%f\n", process(p->opr.op[0])); return 0;
+   case typeCon: {
+                    ret->dType = INTEGER;
+                    ret->con = p -> con.value; 
+                    return ret;
+                 }
+   case typeFlo: {
+                    ret->dType = DECIMAL;
+                    ret->flo = p -> flo.value; 
+                    return ret;
+                 }
+   case typeId:  {
+                  ret -> dType = p -> dType;
+                  if(p -> dType == INTEGER){
+                    ret -> con = (int) symbols[p -> id.i]; 
                   }
-                  else {
-                    printf("%d\n", process(p->opr.op[0])); return 0;
+                  else if(p -> dType == DECIMAL){
+                    ret -> flo = symbols[p -> id.i];
+                  }
+                  return ret;
+                 }
+    case typeOpr:
+       switch(p->opr.oper) {
+       case WHILE: {
+                      while(1){
+                        val *x = process(p -> opr.op[0]);
+                        if(x -> dType == INTEGER && x -> con == 0) break;
+                        if(x -> dType == DECIMAL && x -> flo == 0) break;
+                        process(p->opr.op[1]);
+                    }  
+                    return NULL;
+                  }
+       case IF: {
+                  val *x = process(p -> opr.op[0]);
+                  if (!((x -> dType == INTEGER && x -> con == 0) || (x -> dType == DECIMAL && x -> flo == 0))){
+                      process(p->opr.op[1]);
+                      return NULL;
+                  }  
+                  else if (p->opr.nops > 2) {
+                    process(p->opr.op[2]); return NULL;
                   }
                 }
-   case ';': process(p->opr.op[0]); return process(p->opr.op[1]);
-   case '=': return symbols[p->opr.op[0]->id.i] = process(p->opr.op[1]);
-   case UMINUS: return -process(p->opr.op[0]);
-   case '+': return process(p->opr.op[0]) + process(p->opr.op[1]);
-   case '-': return process(p->opr.op[0]) - process(p->opr.op[1]);
-   case '*': return process(p->opr.op[0]) * process(p->opr.op[1]);
-   case '/': return 1.0 * process(p->opr.op[0]) / process(p->opr.op[1]);
-   case '<': return process(p->opr.op[0]) < process(p->opr.op[1]);
-   case '>': return process(p->opr.op[0]) > process(p->opr.op[1]);
-   case '^': return pow(process(p->opr.op[0]), process(p->opr.op[1]));
-   default : yyerror("Operator not found");
+       case PRINT:  {
+                      val *x = process(p -> opr.op[0]);
+                      if(x -> dType == DECIMAL){
+                        printf("%f\n", x -> flo); return NULL;
+                      }
+                      else if(x -> dType == INTEGER) {
+                        printf("%d\n", x -> con); return NULL;
+                      }
+                    }
+       case ';': {
+                    process(p->opr.op[0]);  
+                    process(p->opr.op[1]);
+                    return NULL;
+                 }
+       case '=': {
+                    val *x = process(p->opr.op[1]);
+                    sym[p->opr.op[0]->id.i] = x -> dType;
+                    if(x -> dType == DECIMAL) {
+                        symbols[p->opr.op[0]->id.i] = x -> flo;
+                    }
+                    else if(x -> dType == INTEGER) {
+                      symbols[p->opr.op[0]->id.i] = x -> con;
+                    }
+                    return NULL;
+                 }
+       case UMINUS: {
+                      val *x = process(p->opr.op[0]);
+                      x -> flo = - x -> flo;
+                      x -> con = - x -> con;
+                      return x;
+                    }
+       case '+': {
+                    val *l = process(p->opr.op[0]);
+                    val *r = process(p->opr.op[1]);
+                    if(l -> dType != r -> dType){
+                      printf("Warning: Datatypes of expressions are different\n");
+                      ret -> dType = DECIMAL;
+                      if(l -> dType == INTEGER){
+                        ret -> flo = l -> con;
+                        ret -> flo += r -> flo;
+                      }
+                      else{
+                        ret -> flo = l -> flo;
+                        ret -> flo += r -> con;
+                      }
+                    }
+                    else {
+                      ret -> dType = INTEGER;
+                      if(l -> dType == INTEGER){
+                        ret -> con = l -> con;
+                        ret -> con += r -> con;
+                      }
+                      else{
+                        ret -> flo = l -> flo;
+                        ret -> flo += r -> flo;
+                      }
+                    }
+
+                    return ret;
+                 }
+       case '-': {
+                    val *l = process(p->opr.op[0]);
+                    val *r = process(p->opr.op[1]);
+                    if(l -> dType != r -> dType){
+                      printf("Warning: Datatypes of expressions are different\n");
+                      ret -> dType = DECIMAL;
+                      if(l -> dType == INTEGER){
+                        ret -> flo = l -> con;
+                        ret -> flo -= r -> flo;
+                      }
+                      else{
+                        ret -> flo = l -> flo;
+                        ret -> flo -= r -> con;
+                      }
+                    }
+                    else {
+                        ret -> dType = INTEGER;
+                      if(l -> dType == INTEGER){
+                        ret -> con = l -> con;
+                        ret -> con -= r -> con;
+                      }
+                      else{
+                        ret -> flo = l -> flo;                      
+                        ret -> flo -= r -> flo;
+                      }
+                    }
+
+                    return ret;
+                 }
+       case '*': {
+                    val *l = process(p->opr.op[0]);
+                    val *r = process(p->opr.op[1]);
+                    if(l -> dType != r -> dType){
+                      printf("Warning: Datatypes of expressions are different\n");
+                      ret -> dType = DECIMAL;
+                      if(l -> dType == INTEGER){
+                        ret -> flo = l -> con;
+                        ret -> flo *= r -> flo;
+                      }
+                      else{
+                        ret -> flo = l -> flo;
+                        ret -> flo *= r -> con;
+                      }
+                    }
+                    else {
+                        ret -> dType = INTEGER;
+                      if(l -> dType == INTEGER){
+                        ret -> con = l -> con;
+                        ret -> con *= r -> con;
+                      }
+                      else{
+                        ret -> flo = l -> flo;
+                        ret -> flo *= r -> flo;
+                      }
+                    }
+
+                    return ret;
+                 }
+       case '/': {
+                    val *l = process(p->opr.op[0]);
+                    val *r = process(p->opr.op[1]);
+                    if(l -> dType != r -> dType){
+                      printf("Warning: Datatypes of expressions are different\n");
+                    }
+                    ret -> dType = DECIMAL;
+                    if(l -> dType == INTEGER ){
+                      ret -> flo = 1.0 * l -> con;
+                      if(r -> dType == INTEGER) ret -> flo /= r -> con;
+                      else ret -> flo /= r -> flo;
+                    }
+                    else{
+                      ret -> flo = 1.0 * l -> flo;
+                      if(r -> dType == INTEGER) ret -> flo /= r -> con;
+                      else ret -> flo /= r -> flo;
+                    }                   
+
+                    return ret;
+                 }
+       case '<': {
+                    val *l = process(p->opr.op[0]);
+                    val *r = process(p->opr.op[1]);
+                    if(l -> dType != r -> dType){
+                      printf("Warning: Datatypes of expressions are different\n");
+                    }
+                    ret -> dType = INTEGER;
+                    if(l -> dType == INTEGER){
+                      if(r -> dType == INTEGER){
+                          ret -> con = (l -> con < r -> con);
+                      }
+                      else ret -> con = (l -> con < r -> flo);
+                    }
+                    else{
+                      if(r -> dType == INTEGER){
+                          ret -> con = (l -> flo < r -> con);
+                      }
+                      else ret -> con = (l -> flo < r -> flo);
+                    }
+                    return ret;
+                 }
+       case '>': {
+                    val *l = process(p->opr.op[0]);
+                    val *r = process(p->opr.op[1]);
+                    if(l -> dType != r -> dType){
+                      printf("Warning: Datatypes of expressions are different\n");
+                    }
+                    ret -> dType = INTEGER;
+                    if(l -> dType == INTEGER){
+                      if(r -> dType == INTEGER){
+                          ret -> con = (l -> con > r -> con);
+                      }
+                      else ret -> con = (l -> con > r -> flo);
+                    }
+                    else{
+                      if(r -> dType == INTEGER){
+                          ret -> con = (l -> flo > r -> con);
+                      }
+                      else ret -> con = (l -> flo > r -> flo);
+                    }
+                    return ret;
+                 }
+       case '^': {
+                    val *l = process(p->opr.op[0]);
+                    val *r = process(p->opr.op[1]);
+                    if(l -> dType != r -> dType){
+                      printf("Warning: Datatypes of expressions are different\n");
+                    }
+                    ret -> dType = DECIMAL;
+                    if(l -> dType == INTEGER ){
+                      ret -> flo = 1.0 * l -> con;
+                      if(r -> dType == INTEGER) ret -> flo = pow(ret -> flo, r -> con);
+                      else ret -> flo = pow(ret -> flo, r -> flo);
+                    }
+                    else{
+                      ret -> flo = 1.0 * l -> flo;
+                      if(r -> dType == INTEGER) ret -> flo = pow(ret -> flo, r -> con);
+                      else ret -> flo = pow(ret -> flo, r -> flo);
+                    }                 
+
+                    return ret;
+                 }
+       default : yyerror("Operator not found");
 
    }
- }
- return 0;
+  }
+  return 0;
 } 
 
