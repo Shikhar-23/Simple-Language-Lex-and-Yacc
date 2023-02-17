@@ -22,7 +22,7 @@ typedef struct {
 struct nodeType {
  nodeEnum type; /* type of node */
  dataType dType;
- conNodeType con; /* constants */
+ conNodeType num; /* constants */
  floNodeType flo; /*floating constants */
  idNodeType id; /* identifiers */
  oprNodeType opr; /* operators */
@@ -30,7 +30,7 @@ struct nodeType {
 
 typedef struct val {
 	dataType dType;
-	int con;
+	int num;
 	float flo;
 } val;
 typedef struct nodeType NodeType;

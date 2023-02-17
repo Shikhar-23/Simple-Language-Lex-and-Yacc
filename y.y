@@ -11,11 +11,11 @@ double symbols[256];
 dataType sym[256];
 NodeType *opr(int oper, int nops, ...);
 NodeType *id(int i);
-NodeType *con(int value);
+NodeType *num(int value);
 NodeType *flo(float);
 
 val *process(struct nodeType *p);
-
+extern int lineno;
 %}
 
 %union {
@@ -30,7 +30,7 @@ val *process(struct nodeType *p);
 %token <id> IDENTIFIER /* Simple identifier */
 %token <deci> DECI /* Simple decimal */
 %token ELSE IF
-%token PRINT
+%token WRITE READ
 %token ASSGNOP
 %token WHILE FOR
 
@@ -54,7 +54,8 @@ function: function stmt { process($2); }
   
 stmt:  ';' { $$ = opr(';', 2, NULL, NULL); }
        | exp ';' { $$ = $1; }
-       | PRINT exp ';' { $$ = opr(PRINT, 1, $2); }
+       | WRITE exp ';' { $$ = opr(WRITE, 1, $2); }
+       | READ IDENTIFIER ';' { $$ = opr(READ, 1, id($2)); }
        | IDENTIFIER '=' exp ';' { $$ = opr('=', 2, id($1), $3); }
        | WHILE '(' exp ')' stmt { $$ = opr(WHILE, 2, $3, $5); }
        | IF '(' exp ')' stmt %prec IFX { $$ = opr(IF, 2, $3, $5); }
@@ -69,7 +70,7 @@ stmt_list:
       
 
 
-exp : NUMBER { $$ = con($1); }
+exp : NUMBER { $$ = num($1); }
      | IDENTIFIER {$$ = id($1); }
      | DECI {$$ = flo($1); }
      | exp '+' exp { $$ = opr('+', 2, $1, $3); }
@@ -114,9 +115,9 @@ NodeType *opr(int oper, int nops, ...) {
  NodeType *p;
  int i;
  if ((p = malloc(sizeof(NodeType))) == NULL)
- yyerror("out of memory");
+    yyerror("out of memory");
  if ((p->opr.op = malloc(nops * sizeof(NodeType))) == NULL)
- yyerror("out of memory");
+    yyerror("out of memory");
  p->type = typeOpr;
  p->opr.oper = oper;
  p->opr.nops = nops;
@@ -127,12 +128,12 @@ NodeType *opr(int oper, int nops, ...) {
  return p;
 } 
 
-NodeType *con(int value) {
+NodeType *num(int value) {
  NodeType *p;
  if ((p = malloc(sizeof(NodeType))) == NULL)
  yyerror("out of memory");
  p->type = typeCon;
- p->con.value = value;
+ p->num.value = value;
  p->dType = INTEGER;
  return p;
 }
@@ -162,12 +163,12 @@ val *process(NodeType *p) {
  val *ret;
  ret = malloc(sizeof(val));
  ret -> dType = INTEGER;
- ret -> con = 0;
+ ret -> num = 0;
  ret -> flo = 0;
  switch(p->type) {
    case typeCon: {
                     ret->dType = INTEGER;
-                    ret->con = p -> con.value; 
+                    ret->num = p -> num.value; 
                     return ret;
                  }
    case typeFlo: {
@@ -178,7 +179,7 @@ val *process(NodeType *p) {
    case typeId:  {
                   ret -> dType = p -> dType;
                   if(p -> dType == INTEGER){
-                    ret -> con = (int) symbols[p -> id.i]; 
+                    ret -> num = (int) symbols[p -> id.i]; 
                   }
                   else if(p -> dType == DECIMAL){
                     ret -> flo = symbols[p -> id.i];
@@ -190,7 +191,7 @@ val *process(NodeType *p) {
        case WHILE: {
                       while(1){
                         val *x = process(p -> opr.op[0]);
-                        if(x -> dType == INTEGER && x -> con == 0) break;
+                        if(x -> dType == INTEGER && x -> num == 0) break;
                         if(x -> dType == DECIMAL && x -> flo == 0) break;
                         process(p->opr.op[1]);
                     }  
@@ -198,21 +199,35 @@ val *process(NodeType *p) {
                   }
        case IF: {
                   val *x = process(p -> opr.op[0]);
-                  if (!((x -> dType == INTEGER && x -> con == 0) || (x -> dType == DECIMAL && x -> flo == 0))){
+                  if (!((x -> dType == INTEGER && x -> num == 0) || (x -> dType == DECIMAL && x -> flo == 0))){
                       process(p->opr.op[1]);
                       return NULL;
                   }  
                   else if (p->opr.nops > 2) {
                     process(p->opr.op[2]); return NULL;
                   }
-                }
-       case PRINT:  {
+              }
+       case READ: {
+                    printf("Enter Value of Variable: ");
+                    float value;
+                    scanf("%f", &value);
+                    if (value != (int)value){
+                      sym[p->opr.op[0]->id.i] = DECIMAL;
+                      symbols[p->opr.op[0]->id.i] = value;
+                    }
+                    else{
+                      sym[p->opr.op[0]->id.i] = INTEGER;
+                      symbols[p->opr.op[0]->id.i] = (int)value;
+                    }
+                    return NULL;
+                  }
+       case WRITE:  {
                       val *x = process(p -> opr.op[0]);
                       if(x -> dType == DECIMAL){
                         printf("%f\n", x -> flo); return NULL;
                       }
                       else if(x -> dType == INTEGER) {
-                        printf("%d\n", x -> con); return NULL;
+                        printf("%d\n", x -> num); return NULL;
                       }
                     }
        case ';': {
@@ -227,14 +242,14 @@ val *process(NodeType *p) {
                         symbols[p->opr.op[0]->id.i] = x -> flo;
                     }
                     else if(x -> dType == INTEGER) {
-                      symbols[p->opr.op[0]->id.i] = x -> con;
+                      symbols[p->opr.op[0]->id.i] = x -> num;
                     }
                     return NULL;
                  }
        case UMINUS: {
                       val *x = process(p->opr.op[0]);
                       x -> flo = - x -> flo;
-                      x -> con = - x -> con;
+                      x -> num = - x -> num;
                       return x;
                     }
        case '+': {
@@ -244,19 +259,19 @@ val *process(NodeType *p) {
                       printf("Warning: Datatypes of expressions are different\n");
                       ret -> dType = DECIMAL;
                       if(l -> dType == INTEGER){
-                        ret -> flo = l -> con;
+                        ret -> flo = l -> num;
                         ret -> flo += r -> flo;
                       }
                       else{
                         ret -> flo = l -> flo;
-                        ret -> flo += r -> con;
+                        ret -> flo += r -> num;
                       }
                     }
                     else {
                       ret -> dType = INTEGER;
                       if(l -> dType == INTEGER){
-                        ret -> con = l -> con;
-                        ret -> con += r -> con;
+                        ret -> num = l -> num;
+                        ret -> num += r -> num;
                       }
                       else{
                         ret -> flo = l -> flo;
@@ -273,19 +288,19 @@ val *process(NodeType *p) {
                       printf("Warning: Datatypes of expressions are different\n");
                       ret -> dType = DECIMAL;
                       if(l -> dType == INTEGER){
-                        ret -> flo = l -> con;
+                        ret -> flo = l -> num;
                         ret -> flo -= r -> flo;
                       }
                       else{
                         ret -> flo = l -> flo;
-                        ret -> flo -= r -> con;
+                        ret -> flo -= r -> num;
                       }
                     }
                     else {
                         ret -> dType = INTEGER;
                       if(l -> dType == INTEGER){
-                        ret -> con = l -> con;
-                        ret -> con -= r -> con;
+                        ret -> num = l -> num;
+                        ret -> num -= r -> num;
                       }
                       else{
                         ret -> flo = l -> flo;                      
@@ -302,19 +317,19 @@ val *process(NodeType *p) {
                       printf("Warning: Datatypes of expressions are different\n");
                       ret -> dType = DECIMAL;
                       if(l -> dType == INTEGER){
-                        ret -> flo = l -> con;
+                        ret -> flo = l -> num;
                         ret -> flo *= r -> flo;
                       }
                       else{
                         ret -> flo = l -> flo;
-                        ret -> flo *= r -> con;
+                        ret -> flo *= r -> num;
                       }
                     }
                     else {
                         ret -> dType = INTEGER;
                       if(l -> dType == INTEGER){
-                        ret -> con = l -> con;
-                        ret -> con *= r -> con;
+                        ret -> num = l -> num;
+                        ret -> num *= r -> num;
                       }
                       else{
                         ret -> flo = l -> flo;
@@ -330,15 +345,19 @@ val *process(NodeType *p) {
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                     }
+                    if((r -> num == 0 && r -> dType == INTEGER) || (r -> flo == 0 && r -> dType == DECIMAL)){
+                      yyerror("Division by zero is not defined");
+                      exit(0);
+                    }
                     ret -> dType = DECIMAL;
                     if(l -> dType == INTEGER ){
-                      ret -> flo = 1.0 * l -> con;
-                      if(r -> dType == INTEGER) ret -> flo /= r -> con;
+                      ret -> flo = 1.0 * l -> num;
+                      if(r -> dType == INTEGER) ret -> flo /= r -> num;
                       else ret -> flo /= r -> flo;
                     }
                     else{
                       ret -> flo = 1.0 * l -> flo;
-                      if(r -> dType == INTEGER) ret -> flo /= r -> con;
+                      if(r -> dType == INTEGER) ret -> flo /= r -> num;
                       else ret -> flo /= r -> flo;
                     }                   
 
@@ -353,15 +372,15 @@ val *process(NodeType *p) {
                     ret -> dType = INTEGER;
                     if(l -> dType == INTEGER){
                       if(r -> dType == INTEGER){
-                          ret -> con = (l -> con < r -> con);
+                          ret -> num = (l -> num < r -> num);
                       }
-                      else ret -> con = (l -> con < r -> flo);
+                      else ret -> num = (l -> num < r -> flo);
                     }
                     else{
                       if(r -> dType == INTEGER){
-                          ret -> con = (l -> flo < r -> con);
+                          ret -> num = (l -> flo < r -> num);
                       }
-                      else ret -> con = (l -> flo < r -> flo);
+                      else ret -> num = (l -> flo < r -> flo);
                     }
                     return ret;
                  }
@@ -374,15 +393,15 @@ val *process(NodeType *p) {
                     ret -> dType = INTEGER;
                     if(l -> dType == INTEGER){
                       if(r -> dType == INTEGER){
-                          ret -> con = (l -> con > r -> con);
+                          ret -> num = (l -> num > r -> num);
                       }
-                      else ret -> con = (l -> con > r -> flo);
+                      else ret -> num = (l -> num > r -> flo);
                     }
                     else{
                       if(r -> dType == INTEGER){
-                          ret -> con = (l -> flo > r -> con);
+                          ret -> num = (l -> flo > r -> num);
                       }
-                      else ret -> con = (l -> flo > r -> flo);
+                      else ret -> num = (l -> flo > r -> flo);
                     }
                     return ret;
                  }
@@ -392,21 +411,25 @@ val *process(NodeType *p) {
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                     }
+
                     ret -> dType = DECIMAL;
                     if(l -> dType == INTEGER ){
-                      ret -> flo = 1.0 * l -> con;
-                      if(r -> dType == INTEGER) ret -> flo = pow(ret -> flo, r -> con);
+                      ret -> flo = 1.0 * l -> num;
+                      if(r -> dType == INTEGER) ret -> flo = pow(ret -> flo, r -> num);
                       else ret -> flo = pow(ret -> flo, r -> flo);
                     }
                     else{
                       ret -> flo = 1.0 * l -> flo;
-                      if(r -> dType == INTEGER) ret -> flo = pow(ret -> flo, r -> con);
+                      if(r -> dType == INTEGER) ret -> flo = pow(ret -> flo, r -> num);
                       else ret -> flo = pow(ret -> flo, r -> flo);
                     }                 
 
                     return ret;
                  }
-       default : yyerror("Operator not found");
+       default : {
+                  yyerror("Operator not found");
+                  exit(0);
+                  }
 
    }
   }

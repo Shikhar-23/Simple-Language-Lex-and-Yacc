@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "y.tab.h"
 int yyerror(char *);
+int lineno = 0;
 %}
 
 
@@ -13,8 +14,8 @@ DOT [\.]
 
 "else"    return(ELSE);
 "if" 	  return(IF);   
-"print"   return(PRINT); 
-"for"     return(FOR);
+"write"   return(WRITE); 
+"read"    return(READ);
 "while"   return(WHILE);
 
 
@@ -38,7 +39,8 @@ DOT [\.]
               return *yytext;
         }
 [ \t]  
-  
+
+[\n]	{lineno++;}
 .       {ECHO; yyerror (" unexpected character");}
 
 
