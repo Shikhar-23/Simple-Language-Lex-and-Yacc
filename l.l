@@ -7,7 +7,8 @@ int lineno = 0;
 
 
 DIGIT [0-9]
-ID [a-z]
+ID [a-z_A-Z]
+ID2[a-zA-Z0-9_]
 DOT [\.]
 
 %%
@@ -17,6 +18,7 @@ DOT [\.]
 "write"   return(WRITE); 
 "read"    return(READ);
 "while"   return(WHILE);
+"function" return(FUNCTION);
 
 
 
@@ -31,8 +33,8 @@ DOT [\.]
         }
 
 
-{ID}		{
-				yylval.id = *yytext;
+{ID}{ID2}*		{
+				yylval.id = yytext;
 				return IDENTIFIER;
 			}
 [-+*/><=;()^{},]  {
@@ -41,7 +43,7 @@ DOT [\.]
 [ \t]  
 
 [\n]	{lineno++;}
-.       {ECHO; yyerror (" unexpected character");}
+.      {ECHO; yyerror (" unexpected symbol");}
 
 
 

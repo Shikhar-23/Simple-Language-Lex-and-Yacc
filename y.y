@@ -7,22 +7,24 @@
 int yyerror(char*);
 int yylex();
 extern FILE* yyin;
-double symbols[256];
-dataType sym[256];
-NodeType *opr(int oper, int nops, ...);
-NodeType *id(int i);
-NodeType *num(int value);
-NodeType *flo(float);
+#define MAX 10009
+double symbols[MAX];
+dataType sym[MAX];
+char* address[MAX];
 
-val *process(struct nodeType *p);
-extern int lineno;
+st_info *st_add(int oper, int nops, ...);
+st_info *id(char * c);
+st_info *num(int value);
+st_info *flo(float);
+int hash(char *);
+val *process(struct st_info *p);
 %}
 
 %union {
   int intval;
-  char id;
+  char* id;
   float deci;
-  struct nodeType *nPtr;
+  struct st_info *nPtr;
 };
 
 %start program
@@ -33,13 +35,15 @@ extern int lineno;
 %token WRITE READ
 %token ASSGNOP
 %token WHILE FOR
+%token FUNCTION
+
 
 %type <nPtr> stmt exp stmt_list
 
 %nonassoc IFX
 %nonassoc ELSE
 %left '='
-%left GE LE EQ NE '>' '<'
+%left '>' '<'
 %left '+' '-'
 %left '*' '/'
 %right '^'
@@ -49,23 +53,23 @@ program: function {  exit(0);  }
         ;
 
 function: function stmt { process($2); }
-          | 
+          |
           ;
   
-stmt:  ';' { $$ = opr(';', 2, NULL, NULL); }
+stmt:  ';' { $$ = st_add(';', 2, NULL, NULL); }
        | exp ';' { $$ = $1; }
-       | WRITE exp ';' { $$ = opr(WRITE, 1, $2); }
-       | READ IDENTIFIER ';' { $$ = opr(READ, 1, id($2)); }
-       | IDENTIFIER '=' exp ';' { $$ = opr('=', 2, id($1), $3); }
-       | WHILE '(' exp ')' stmt { $$ = opr(WHILE, 2, $3, $5); }
-       | IF '(' exp ')' stmt %prec IFX { $$ = opr(IF, 2, $3, $5); }
-       | IF '(' exp ')' stmt ELSE stmt { $$ = opr(IF, 3, $3, $5, $7); }
+       | WRITE exp ';' { $$ = st_add(WRITE, 1, $2); }
+       | READ IDENTIFIER ';' { $$ = st_add(READ, 1, id($2)); }
+       | IDENTIFIER '=' exp ';' { $$ = st_add('=', 2, id($1), $3); }
+       | WHILE '(' exp ')' stmt { $$ = st_add(WHILE, 2, $3, $5); }
+       | IF '(' exp ')' stmt %prec IFX { $$ = st_add(IF, 2, $3, $5); }
+       | IF '(' exp ')' stmt ELSE stmt { $$ = st_add(IF, 3, $3, $5, $7); }
        | '{' stmt_list '}' { $$ = $2; }
        ;
 
 stmt_list:
  stmt { $$ = $1; }
- | stmt_list stmt { $$ = opr(';', 2, $1, $2); }
+ | stmt_list stmt { $$ = st_add(';', 2, $1, $2); }
  ; 
       
 
@@ -73,15 +77,15 @@ stmt_list:
 exp : NUMBER { $$ = num($1); }
      | IDENTIFIER {$$ = id($1); }
      | DECI {$$ = flo($1); }
-     | exp '+' exp { $$ = opr('+', 2, $1, $3); }
-     | exp '-' exp { $$ = opr('-', 2, $1, $3); }
-     | exp '*' exp { $$ = opr('*', 2, $1, $3); }
-     | exp '/' exp { $$ = opr('/', 2, $1, $3); }
-     | exp '<' exp { $$ = opr('<', 2, $1, $3); }
-     | exp '>' exp { $$ = opr('>', 2, $1, $3); } 
-     | exp '^' exp { $$ = opr('^', 2, $1, $3); }
+     | exp '+' exp { $$ = st_add('+', 2, $1, $3); }
+     | exp '-' exp { $$ = st_add('-', 2, $1, $3); }
+     | exp '*' exp { $$ = st_add('*', 2, $1, $3); }
+     | exp '/' exp { $$ = st_add('/', 2, $1, $3); }
+     | exp '<' exp { $$ = st_add('<', 2, $1, $3); }
+     | exp '>' exp { $$ = st_add('>', 2, $1, $3); } 
+     | exp '^' exp { $$ = st_add('^', 2, $1, $3); }
      | '(' exp ')' { $$ = $2; }
-     | '-' exp %prec UMINUS { $$ = opr(UMINUS, 1, $2); } 
+     | '-' exp %prec UMINUS { $$ = st_add(UMINUS, 1, $2); } 
 
 ;
 
@@ -93,9 +97,10 @@ int yyerror(char *s){
 }
 
 int main(int argc, char **argv){
-  for(int i=0; i<256; i++) {
+  for(int i=0; i<MAX; i++) {
     symbols[i] = 0;
     sym[i] = INTEGER;
+
   }
    FILE *f;
   if(argc != 2){
@@ -110,27 +115,37 @@ int main(int argc, char **argv){
   return 0;
 }
 
-NodeType *opr(int oper, int nops, ...) {
+int hash(char *c){
+  int ans = 0;
+  while(*c == '_' || (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9')){
+    ans = ans * 31 + *c - 'a' + 1;
+    ans %= MAX;
+    c++;
+  }
+  // printf(c);
+  return ans;
+}
+st_info *st_add(int oper, int nops, ...) {
  va_list ap;
- NodeType *p;
+ st_info *p;
  int i;
- if ((p = malloc(sizeof(NodeType))) == NULL)
+ if ((p = malloc(sizeof(st_info))) == NULL)
     yyerror("out of memory");
- if ((p->opr.op = malloc(nops * sizeof(NodeType))) == NULL)
+ if ((p->st_add.op = malloc(nops * sizeof(st_info))) == NULL)
     yyerror("out of memory");
- p->type = typeOpr;
- p->opr.oper = oper;
- p->opr.nops = nops;
+ p->type = typeStm;
+ p->st_add.oper = oper;
+ p->st_add.nops = nops;
  va_start(ap, nops);
  for (i = 0; i < nops; i++)
- p->opr.op[i] = va_arg(ap, NodeType*);
+ p->st_add.op[i] = va_arg(ap, st_info*);
  va_end(ap);
  return p;
 } 
 
-NodeType *num(int value) {
- NodeType *p;
- if ((p = malloc(sizeof(NodeType))) == NULL)
+st_info *num(int value) {
+ st_info *p;
+ if ((p = malloc(sizeof(st_info))) == NULL)
  yyerror("out of memory");
  p->type = typeCon;
  p->num.value = value;
@@ -138,9 +153,9 @@ NodeType *num(int value) {
  return p;
 }
 
-NodeType *flo(float value) {
- NodeType *p;
- if ((p = malloc(sizeof(NodeType))) == NULL)
+st_info *flo(float value) {
+ st_info *p;
+ if ((p = malloc(sizeof(st_info))) == NULL)
  yyerror("out of memory");
  p->type = typeFlo;
  p->flo.value = value;
@@ -148,17 +163,23 @@ NodeType *flo(float value) {
  return p;
 }
 
-NodeType *id(int i) {
- NodeType *p;
- if ((p = malloc(sizeof(NodeType))) == NULL)
+st_info *id(char *c) {
+ // printf("Variable name: \n");
+ // printf(c);
+ int i = hash(c);
+ // printf(c);
+ // printf("hash of var: %d\n", i);
+ st_info *p;
+ if ((p = malloc(sizeof(st_info))) == NULL)
     yyerror("out of memory");
  p->type = typeId;
  p->id.i = i;
  p -> dType = sym[i];
+ address[i] = c;
  return p;
 } 
 
-val *process(NodeType *p) {
+val *process(st_info *p) {
  if (!p) return 0;
  val *ret;
  ret = malloc(sizeof(val));
@@ -186,25 +207,25 @@ val *process(NodeType *p) {
                   }
                   return ret;
                  }
-    case typeOpr:
-       switch(p->opr.oper) {
+    case typeStm:
+       switch(p->st_add.oper) {
        case WHILE: {
-                      while(1){
-                        val *x = process(p -> opr.op[0]);
-                        if(x -> dType == INTEGER && x -> num == 0) break;
-                        if(x -> dType == DECIMAL && x -> flo == 0) break;
-                        process(p->opr.op[1]);
+                    while(1){
+                      val *x = process(p -> st_add.op[0]);
+                      if(x -> dType == INTEGER && x -> num == 0) break;
+                      if(x -> dType == DECIMAL && x -> flo == 0) break;
+                      process(p->st_add.op[1]);
                     }  
                     return NULL;
                   }
        case IF: {
-                  val *x = process(p -> opr.op[0]);
+                  val *x = process(p -> st_add.op[0]);
                   if (!((x -> dType == INTEGER && x -> num == 0) || (x -> dType == DECIMAL && x -> flo == 0))){
-                      process(p->opr.op[1]);
+                      process(p->st_add.op[1]);
                       return NULL;
                   }  
-                  else if (p->opr.nops > 2) {
-                    process(p->opr.op[2]); return NULL;
+                  else if (p->st_add.nops > 2) {
+                    process(p->st_add.op[2]); return NULL;
                   }
               }
        case READ: {
@@ -212,17 +233,17 @@ val *process(NodeType *p) {
                     float value;
                     scanf("%f", &value);
                     if (value != (int)value){
-                      sym[p->opr.op[0]->id.i] = DECIMAL;
-                      symbols[p->opr.op[0]->id.i] = value;
+                      sym[p->st_add.op[0]->id.i] = DECIMAL;
+                      symbols[p->st_add.op[0]->id.i] = value;
                     }
                     else{
-                      sym[p->opr.op[0]->id.i] = INTEGER;
-                      symbols[p->opr.op[0]->id.i] = (int)value;
+                      sym[p->st_add.op[0]->id.i] = INTEGER;
+                      symbols[p->st_add.op[0]->id.i] = (int)value;
                     }
                     return NULL;
                   }
        case WRITE:  {
-                      val *x = process(p -> opr.op[0]);
+                      val *x = process(p -> st_add.op[0]);
                       if(x -> dType == DECIMAL){
                         printf("%f\n", x -> flo); return NULL;
                       }
@@ -231,30 +252,31 @@ val *process(NodeType *p) {
                       }
                     }
        case ';': {
-                    process(p->opr.op[0]);  
-                    process(p->opr.op[1]);
+                    process(p->st_add.op[0]);  
+                    process(p->st_add.op[1]);
                     return NULL;
                  }
        case '=': {
-                    val *x = process(p->opr.op[1]);
-                    sym[p->opr.op[0]->id.i] = x -> dType;
+                    val *x = process(p->st_add.op[1]);
+                    // printf("Hash : %d", p->st_add.op[0]->id.i);
+                    sym[p->st_add.op[0]->id.i] = x -> dType;
                     if(x -> dType == DECIMAL) {
-                        symbols[p->opr.op[0]->id.i] = x -> flo;
+                        symbols[p->st_add.op[0]->id.i] = x -> flo;
                     }
                     else if(x -> dType == INTEGER) {
-                      symbols[p->opr.op[0]->id.i] = x -> num;
+                      symbols[p->st_add.op[0]->id.i] = x -> num;
                     }
                     return NULL;
                  }
        case UMINUS: {
-                      val *x = process(p->opr.op[0]);
+                      val *x = process(p->st_add.op[0]);
                       x -> flo = - x -> flo;
                       x -> num = - x -> num;
                       return x;
                     }
        case '+': {
-                    val *l = process(p->opr.op[0]);
-                    val *r = process(p->opr.op[1]);
+                    val *l = process(p->st_add.op[0]);
+                    val *r = process(p->st_add.op[1]);
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                       ret -> dType = DECIMAL;
@@ -282,8 +304,8 @@ val *process(NodeType *p) {
                     return ret;
                  }
        case '-': {
-                    val *l = process(p->opr.op[0]);
-                    val *r = process(p->opr.op[1]);
+                    val *l = process(p->st_add.op[0]);
+                    val *r = process(p->st_add.op[1]);
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                       ret -> dType = DECIMAL;
@@ -311,8 +333,8 @@ val *process(NodeType *p) {
                     return ret;
                  }
        case '*': {
-                    val *l = process(p->opr.op[0]);
-                    val *r = process(p->opr.op[1]);
+                    val *l = process(p->st_add.op[0]);
+                    val *r = process(p->st_add.op[1]);
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                       ret -> dType = DECIMAL;
@@ -340,8 +362,8 @@ val *process(NodeType *p) {
                     return ret;
                  }
        case '/': {
-                    val *l = process(p->opr.op[0]);
-                    val *r = process(p->opr.op[1]);
+                    val *l = process(p->st_add.op[0]);
+                    val *r = process(p->st_add.op[1]);
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                     }
@@ -364,8 +386,8 @@ val *process(NodeType *p) {
                     return ret;
                  }
        case '<': {
-                    val *l = process(p->opr.op[0]);
-                    val *r = process(p->opr.op[1]);
+                    val *l = process(p->st_add.op[0]);
+                    val *r = process(p->st_add.op[1]);
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                     }
@@ -385,8 +407,8 @@ val *process(NodeType *p) {
                     return ret;
                  }
        case '>': {
-                    val *l = process(p->opr.op[0]);
-                    val *r = process(p->opr.op[1]);
+                    val *l = process(p->st_add.op[0]);
+                    val *r = process(p->st_add.op[1]);
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                     }
@@ -406,8 +428,8 @@ val *process(NodeType *p) {
                     return ret;
                  }
        case '^': {
-                    val *l = process(p->opr.op[0]);
-                    val *r = process(p->opr.op[1]);
+                    val *l = process(p->st_add.op[0]);
+                    val *r = process(p->st_add.op[1]);
                     if(l -> dType != r -> dType){
                       printf("Warning: Datatypes of expressions are different\n");
                     }
@@ -428,7 +450,7 @@ val *process(NodeType *p) {
                  }
        default : {
                   yyerror("Operator not found");
-                  exit(0);
+                  exit(1);
                   }
 
    }
