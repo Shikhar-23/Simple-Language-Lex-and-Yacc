@@ -15,34 +15,46 @@ DOT [\.]
 
 "else"    return(ELSE);
 "if" 	  return(IF);   
-"write"   return(WRITE); 
+"write"   { 
+            // printf("write "); 
+            return(WRITE); 
+          }
 "read"    return(READ);
 "while"   return(WHILE);
-"function" return(FUNCTION);
-
+"function" {
+            // printf("function ");
+            return(FUNCTION);
+            }
 
 
 [-]?{DIGIT}+  {
             yylval.intval = atoi(yytext);
+            // printf("Number ");
             return(NUMBER);
         }
 
 [-]?{DIGIT}+{DOT}{DIGIT}+  {
             yylval.deci = atof(yytext);
+            // printf("Decimal ");
+
             return(DECI);
         }
 
 
 {ID}{ID2}*		{
 				yylval.id = yytext;
+                // printf(yytext);
+                // printf(" ");
+
 				return IDENTIFIER;
 			}
-[-+*/><=;()^{},]  {
+[-+*/><=()^{},;]  {
+            //   printf(yytext);
+            //   printf(" ");
               return *yytext;
         }
-[ \t]  
+[ \t\n]  
 
-[\n]	{lineno++;}
 .      {ECHO; yyerror (" unexpected symbol");}
 
 
