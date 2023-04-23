@@ -1,3 +1,4 @@
+function main(){
 x = 2 + 3 - 5*4;
 y = 3;
 write(x);
@@ -5,3 +6,4 @@ write(y);
 write(x ^ y);
 write(y / 2.6);
 write x * 3.14;
+}

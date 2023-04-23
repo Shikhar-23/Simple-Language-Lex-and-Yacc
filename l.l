@@ -16,15 +16,14 @@ DOT [\.]
 "else"    return(ELSE);
 "if" 	  return(IF);   
 "write"   { 
-            // printf("write "); 
             return(WRITE); 
           }
 "read"    return(READ);
 "while"   return(WHILE);
 "function" {
-            // printf("function ");
             return(FUNCTION);
             }
+"class" return (CLASS);
 
 
 [-]?{DIGIT}+  {
@@ -48,9 +47,7 @@ DOT [\.]
 
 				return IDENTIFIER;
 			}
-[-+*/><=()^{},;]  {
-            //   printf(yytext);
-            //   printf(" ");
+[-+*/><=()^{},;.]  {
               return *yytext;
         }
 [ \t\n]  

@@ -1,6 +1,6 @@
-typedef enum { typeCon, typeFlo, typeId, typeOpr } nodeEnum;
-typedef enum { INTEGER, DECIMAL, CHARACTER} dataType;
-const char* dArr[] = {"INTEGER", "DECIMAL", "CHARACTER"};
+typedef enum { typeCon, typeFlo, typeId, typeStm} nodeEnum;
+typedef enum { INTEGER, DECIMAL, ID, FUNCTION_ID} dataType;
+const char* dArr[] = {"INTEGER", "DECIMAL", "ID", "FUNCTION_ID"};
 typedef struct {
  int value;
 } conNodeType;
@@ -16,16 +16,22 @@ typedef struct {
 typedef struct {
  int oper; 
  int nops; 
- struct nodeType **op; 
+ struct st_info **op; 
 } oprNodeType;
 
-struct nodeType {
+typedef struct class_vars {
+	struct st_info* var;
+	struct class_vars *cls_vr;
+} class_vars; 
+
+struct st_info {
  nodeEnum type; /* type of node */
  dataType dType;
  conNodeType num; /* constants */
  floNodeType flo; /*floating constants */
  idNodeType id; /* identifiers */
- oprNodeType opr; /* operators */
+ oprNodeType st_add; /* operators */
+ class_vars* cls_vr;
 };
 
 typedef struct val {
@@ -33,4 +39,5 @@ typedef struct val {
 	int num;
 	float flo;
 } val;
-typedef struct nodeType NodeType;
+typedef struct st_info st_info;
+

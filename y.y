@@ -6,7 +6,6 @@
 #include "util.h"
 int yyerror(char*);
 int yylex();
-int yydebug = 1;
 extern FILE* yyin;
 #define MAX 10009
 double symbols[MAX];
@@ -20,7 +19,12 @@ st_info *func(char * c);
 st_info *num(int value);
 st_info *flo(float);
 void add_func(struct st_info*, struct st_info*);
-
+void add_class(st_info *cls_id, class_vars *stmt);
+class_vars* add_var(class_vars *stmt, st_info *var);
+class_vars* create_var(st_info *var);
+st_info *cls(char *c);
+st_info* get_val(st_info *cls_id, st_info *id);
+void update_add(st_info *cls_id, st_info*id);
 int hash(char *);
 val *process(struct st_info *p);
 %}
@@ -30,6 +34,7 @@ val *process(struct st_info *p);
   char* id;
   float deci;
   struct st_info *nPtr;
+  struct class_vars *clsvr;
 };
 
 %start program
@@ -41,10 +46,10 @@ val *process(struct st_info *p);
 %token ASSGNOP
 %token WHILE FOR
 %token FUNCTION
-%token FUNC
-
+%token FUNC CLASS
+%token GET_VAL
 %type <nPtr> stmt exp stmt_list;
-
+%type <clsvr> ClassVars;
 %nonassoc IFX
 %nonassoc ELSE
 %left '='
@@ -54,26 +59,31 @@ val *process(struct st_info *p);
 %right '^'
 %nonassoc UMINUS
 %%
-program: functions { exit(0);  }
+program: Definitions { exit(0);  }
         ;
-functions : functionDef functions
+Definitions : functionDef Definitions 
+          | classDef Definitions
           |
           ;
-functionDef: FUNCTION IDENTIFIER '(' ')' stmt { 
-             add_func(func($2), $5);
-            }
+functionDef: FUNCTION IDENTIFIER '(' ')' stmt { add_func(func($2), $5); }
           ;
-  
+classDef: CLASS IDENTIFIER '{' ClassVars ';' '}'{ add_class(cls($2), $4);  } 
+          ;
+ClassVars: ClassVars ',' IDENTIFIER { $$ = add_var($1, id($3));}
+           | IDENTIFIER {$$ = create_var(id($1)); }
+          ; 
 stmt:  ';' { $$ = st_add(';', 2, NULL, NULL); }
        | exp ';' { $$ = $1; }
        | WRITE exp ';' { $$ = st_add(WRITE, 1, $2); }
        | READ IDENTIFIER ';' { $$ = st_add(READ, 1, id($2)); }
+       |IDENTIFIER '.' IDENTIFIER  '=' exp ';' {$$ = st_add('=', 3, cls($1), id($3), $5); }
        | IDENTIFIER '=' exp ';' { $$ = st_add('=', 2, id($1), $3); }
        | WHILE '(' exp ')' stmt { $$ = st_add(WHILE, 2, $3, $5); }
        | IF '(' exp ')' stmt %prec IFX { $$ = st_add(IF, 2, $3, $5); }
        | IF '(' exp ')' stmt ELSE stmt { $$ = st_add(IF, 3, $3, $5, $7); }
        | '{' stmt_list '}' { $$ = $2;}
        | IDENTIFIER '(' ')' ';' {$$ = st_add(FUNC, 1, func($1)); }
+       | IDENTIFIER IDENTIFIER '(' ')' ';'{update_add(cls($1), id($2)); }
        ;
 
 stmt_list:
@@ -95,6 +105,8 @@ exp : NUMBER { $$ = num($1); }
      | exp '^' exp { $$ = st_add('^', 2, $1, $3); }
      | '(' exp ')' { $$ = $2; }
      | '-' exp %prec UMINUS { $$ = st_add(UMINUS, 1, $2); } 
+     | IDENTIFIER '.' IDENTIFIER {$$ = st_add(GET_VAL, 2, cls($1), id($3)) ; }
+
 
 ;
 
@@ -123,6 +135,33 @@ int main(int argc, char **argv){
 
   return 0;
 }
+void update_add(st_info *cls_id, st_info*id){
+    address[id -> id.i] = address[cls_id-> id.i];
+}
+void add_class(st_info *cls_id, class_vars *stmt){
+   class_vars* nw_cls = malloc(sizeof(class_vars));
+   nw_cls->cls_vr = malloc(sizeof(class_vars)); 
+   nw_cls->cls_vr = stmt;
+   nw_cls->var = cls_id; 
+  //  printf("Class added");
+  //  printf(" %d ", cls_id->id.i);
+   address[cls_id->id.i]->cls_vr = malloc(sizeof(class_vars));
+   address[cls_id->id.i]->cls_vr = stmt;
+  // printf("%d ", cls_id->id.i);
+  //  printf("Class added");
+}
+class_vars* add_var(class_vars *stmt, st_info *var){
+  stmt -> cls_vr = malloc(sizeof(class_vars));
+  stmt -> cls_vr -> var = var;
+  // printf("%d ", var->id.i);
+  return stmt;
+}
+class_vars* create_var(st_info *var){
+  class_vars *cls = malloc(sizeof(class_vars));
+  cls->var = var;
+  // printf("%d ", var->id.i);
+  return cls;
+}
 void add_func(st_info *func_id, st_info *stmt_list){
   address[func_id->id.i] = stmt_list;
   char *M = "main";
@@ -144,7 +183,7 @@ int hash(char *c){
     c++;
   }
   // printf(c);
-  return ans;
+  return abs(ans);
 }
 st_info *st_add(int oper, int nops, ...) {
  va_list ap;
@@ -185,8 +224,6 @@ st_info *flo(float value) {
 }
 
 st_info *id(char *c) {
- // printf("Variable name: \n");
-//  printf(c);
  int i = hash(c);
  // printf(c);
 //  printf("hash of var: %d\n", i);
@@ -208,6 +245,23 @@ st_info *func(char *c) {
  p->type = typeStm;
  p->id.i = i;
  p -> dType = sym[i];
+//  address[i] -> id.i = i;
+//  address[i] -> dType = FUNCTION_ID;
+//  printf("func created");
+ return p;
+} 
+
+st_info *cls(char *c) {
+ st_info *p;
+ if ((p = malloc(sizeof(st_info))) == NULL)
+    yyerror("out of memory");
+ int i = hash(c);
+ p->type = typeStm;
+ p->id.i = i;
+//  printf(c);
+//  printf(" %d ", i);
+ p -> dType = sym[i];
+//  printf("here");
 //  address[i] -> id.i = i;
 //  address[i] -> dType = FUNCTION_ID;
 //  printf("func created");
@@ -243,6 +297,34 @@ val *process(st_info *p) {
                  }
     case typeStm:
        switch(p->st_add.oper) {
+       case CLASS: {
+                      int i = (p -> st_add.op[1]) -> id.i;
+                      (p -> st_add.op[1]) -> id.i = p -> st_add.op[0] -> id.i;
+                      // address[i] = address[p -> st_add.op[0] -> id.i];
+                      // printf(" %d %d ", i, p -> st_add.op[0] -> id.i);
+                      return NULL;
+                  }
+       case GET_VAL: {
+                      // printf("here");
+                      class_vars* ptr = address[p -> st_add.op[0]->id.i] -> cls_vr;
+
+                      // printf(" %d ", p -> st_add.op[0]->id.i);
+                      // printf("%d\n", p -> st_add.op[1]->id.i);
+
+                      if(!ptr){
+                        yyerror("No such class");
+                      }
+                      while(ptr -> var -> id.i != p -> st_add.op[1]->id.i){
+                        ptr = ptr -> cls_vr;
+                        if(!ptr){
+                          yyerror("No such attribute of class");
+                        }
+                      }
+                      // printf("here");
+                      ret -> num = ptr -> var -> num.value;
+                      ret -> flo = ptr -> var -> flo.value;
+                      return ret;
+                  }
        case FUNC: {
                     // printf("here ");
                     int h = (p -> st_add.op[0]) -> id.i;
@@ -299,17 +381,43 @@ val *process(st_info *p) {
                     return NULL;
                  }
        case '=': {
-                    val *x = process(p->st_add.op[1]);
+                    if(p->st_add.nops == 2){
+                      val *x = process(p->st_add.op[1]);
                     // printf("Hash : %d", p->st_add.op[0]->id.i);
-                    sym[p->st_add.op[0]->id.i] = x -> dType;
-                    if(x -> dType == DECIMAL) {
-                        symbols[p->st_add.op[0]->id.i] = x -> flo;
+                      sym[p->st_add.op[0]->id.i] = x -> dType;
+                      if(x -> dType == DECIMAL) {
+                          symbols[p->st_add.op[0]->id.i] = x -> flo;
+                      }
+                      else if(x -> dType == INTEGER) {
+                        symbols[p->st_add.op[0]->id.i] = x -> num;
+                      }
+                      // printf("here");
+                      return NULL;
                     }
-                    else if(x -> dType == INTEGER) {
-                      symbols[p->st_add.op[0]->id.i] = x -> num;
+                    else{
+                      // printf("here");
+                      class_vars* ptr = address[p -> st_add.op[0]->id.i] -> cls_vr;
+
+                      // printf(" %d ", p -> st_add.op[0]->id.i);
+                      // printf("%d\n", p -> st_add.op[1]->id.i);
+                      // printf("here\n");
+
+                      if(!ptr){
+                        yyerror("No such class");
+                      }
+                      while(ptr -> var -> id.i != p -> st_add.op[1]->id.i){
+                        ptr = ptr -> cls_vr;
+                        if(!ptr){
+                          yyerror("No such attribute of class");
+                        }
+                      }
+                      // printf("here\n");
+                      // printf(" %d ", p->st_add.op[2] ->num.value);
+                      ptr -> var -> num.value = p->st_add.op[2] ->num.value;
+                      ptr -> var -> flo.value = p->st_add.op[2] ->flo.value;
+                      return NULL;
                     }
-                    // printf("here");
-                    return NULL;
+
                  }
        case UMINUS: {
                       val *x = process(p->st_add.op[0]);

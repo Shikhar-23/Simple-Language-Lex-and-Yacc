@@ -1,0 +1,17 @@
+function calcNext(){
+	n = p + c;
+	c = p;
+	p = n;
+	write(n);
+	t = t - 1;
+}
+function main(){
+p = 1;
+c = 1;
+n = 0;
+t = 10;
+while(t > 0){
+ calcNext();
+}
+}
+

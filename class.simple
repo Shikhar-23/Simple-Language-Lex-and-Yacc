@@ -1,0 +1,9 @@
+class XY{
+ x;
+}
+function main(){   
+ XY obj();
+ obj.x = 3;
+ write( obj.x + 5);
+}
+
